@@ -77,7 +77,7 @@ def plot(results: dict[str, dict[str, float]], out: Path) -> None:
         for b, v in zip(bars, vals, strict=True):
             ax.text(b.get_x() + b.get_width() / 2, v + 0.01, f"{v:.2f}", ha="center", fontsize=7)
     ax.set_xticks([i + width for i in range(len(names))], names)
-    ax.set_ylim(0, 1.05)
+    ax.set_ylim(0, 1.2)
     ax.set_title("Retrieval quality on SciFact by strategy")
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(frameon=False, ncol=3, loc="upper left")
@@ -92,7 +92,18 @@ def main() -> None:
     p.add_argument("--embedding-model", default="BAAI/bge-small-en-v1.5")
     p.add_argument("--no-rerank", action="store_true", help="Skip the cross-encoder variants.")
     p.add_argument("--limit", type=int, default=None, help="Evaluate only the first N queries.")
+    p.add_argument(
+        "--replot",
+        action="store_true",
+        help="Re-draw the chart from an existing results/benchmark.json without re-running.",
+    )
     args = p.parse_args()
+
+    if args.replot:
+        results = json.loads((args.out_dir / "benchmark.json").read_text())
+        plot(results, args.out_dir / "benchmark.png")
+        print(f"Wrote {args.out_dir / 'benchmark.png'}")
+        return
 
     corpus = load_scifact(args.data_dir)
     if args.limit:
