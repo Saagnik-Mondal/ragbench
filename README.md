@@ -8,6 +8,8 @@ Most RAG demos never check whether retrieval actually works. This project treats
 
 ## Results
 
+**In plain terms:** the best setup (hybrid) finds about 84% of the correct papers within its first 10 results, compared with about 79% for ordinary keyword search. The table below has the details, and a short key to the metric names follows it.
+
 Benchmark: [BEIR SciFact](https://github.com/beir-cellar/beir) (5,183 scientific abstracts, 300 test claims with expert relevance labels). Embeddings: `BAAI/bge-small-en-v1.5` (quantized ONNX). Reranker: `ms-marco-MiniLM-L-6-v2` cross-encoder over the top 30 hybrid candidates.
 
 | Strategy | nDCG@10 | Recall@10 | Recall@100 | MRR@10 | Mean latency |
@@ -20,6 +22,17 @@ Benchmark: [BEIR SciFact](https://github.com/beir-cellar/beir) (5,183 scientific
 ![Retrieval quality by strategy](results/benchmark.png)
 
 Latency is mean time per query on a standard GitHub Actions runner (CPU only, one query at a time). Raw numbers are in [`results/benchmark.json`](results/benchmark.json); the run that produced them is reproducible from the Actions tab (see below).
+
+### How to read these numbers
+
+Each of the 300 test questions has a few papers that experts marked as correct. The system returns a ranked list of papers for each question, and these metrics score that list. All of them run from 0 to 1, and higher is better. These are the standard retrieval measures used by the BEIR benchmark, so results can be compared with other work.
+
+| Metric | In plain words |
+|---|---|
+| **Recall@10** | Of the correct papers, what share appears in the top 10 results. |
+| **Recall@100** | The same, but for the top 100. It shows whether the correct papers were found at all, which matters if a later step re-sorts the list. |
+| **MRR@10** | How high the first correct paper is ranked. 1st place scores 1, 2nd scores 0.5, 5th scores 0.2, averaged over all questions. |
+| **nDCG@10** | One overall quality score for the top 10. It rewards putting correct papers near the top, and 1.0 would be a perfect ordering. It is the headline metric of BEIR. |
 
 ### What the numbers say
 
