@@ -1,9 +1,17 @@
 name: Benchmark
 
-# Runs the full SciFact retrieval benchmark on GitHub's servers and saves the results
-# (benchmark.json, benchmark.md, benchmark.png) as a downloadable artifact.
+# Runs the retrieval benchmark on GitHub's servers for a chosen BEIR dataset and saves the
+# results (benchmark.json, benchmark.md, benchmark.png) as a downloadable artifact.
 on:
   workflow_dispatch:
+    inputs:
+      dataset:
+        description: "BEIR dataset to benchmark"
+        type: choice
+        default: scifact
+        options:
+          - scifact
+          - nfcorpus
 
 permissions:
   contents: read
@@ -11,7 +19,7 @@ permissions:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.fastembed_cache
     steps:
@@ -26,12 +34,12 @@ jobs:
           path: |
             .fastembed_cache
             data
-          key: ragbench-models-${{ hashFiles('src/ragbench/retrievers.py', 'src/ragbench/data.py') }}
+          key: ragbench-${{ inputs.dataset }}-v2
 
       - name: Run benchmark
-        run: uv run python -m ragbench.evaluate
+        run: uv run python -m ragbench.evaluate --dataset ${{ inputs.dataset }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmark-results-${{ inputs.dataset }}
           path: results/

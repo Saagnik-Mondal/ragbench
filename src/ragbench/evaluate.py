@@ -8,7 +8,7 @@ import statistics
 import time
 from pathlib import Path
 
-from .data import Corpus, load_scifact
+from .data import Corpus, load_beir_dataset
 from .metrics import mrr_at_k, ndcg_at_k, recall_at_k
 from .retrievers import (
     FastEmbedder,
@@ -39,11 +39,13 @@ def evaluate_retriever(retriever: Retriever, corpus: Corpus, k: int = 10) -> dic
     }
 
 
-def to_markdown(results: dict[str, dict[str, float]], n_docs: int, n_queries: int) -> str:
+def to_markdown(
+    results: dict[str, dict[str, float]], n_docs: int, n_queries: int, label: str = "SciFact"
+) -> str:
     cols = list(next(iter(results.values())).keys())
     best = {c: max(r[c] for r in results.values()) for c in cols if "latency" not in c}
     lines = [
-        f"Dataset: BEIR SciFact, {n_docs:,} documents, {n_queries} test queries.\n",
+        f"Dataset: BEIR {label}, {n_docs:,} documents, {n_queries} test queries.\n",
         "| Strategy | " + " | ".join(cols) + " |",
         "|---|" + "---:|" * len(cols),
     ]
@@ -60,7 +62,7 @@ def to_markdown(results: dict[str, dict[str, float]], n_docs: int, n_queries: in
     return "\n".join(lines) + "\n"
 
 
-def plot(results: dict[str, dict[str, float]], out: Path) -> None:
+def plot(results: dict[str, dict[str, float]], out: Path, label: str = "SciFact") -> None:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -78,7 +80,7 @@ def plot(results: dict[str, dict[str, float]], out: Path) -> None:
             ax.text(b.get_x() + b.get_width() / 2, v + 0.01, f"{v:.2f}", ha="center", fontsize=7)
     ax.set_xticks([i + width for i in range(len(names))], names)
     ax.set_ylim(0, 1.2)
-    ax.set_title("Retrieval quality on SciFact by strategy")
+    ax.set_title(f"Retrieval quality on {label} by strategy")
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(frameon=False, ncol=3, loc="upper left")
     fig.tight_layout()
@@ -86,9 +88,17 @@ def plot(results: dict[str, dict[str, float]], out: Path) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Benchmark retrieval strategies on SciFact.")
+    p = argparse.ArgumentParser(description="Benchmark retrieval strategies on a BEIR dataset.")
+    p.add_argument(
+        "--dataset", default="scifact", help="BEIR dataset name, e.g. scifact or nfcorpus."
+    )
     p.add_argument("--data-dir", type=Path, default=Path("data"))
-    p.add_argument("--out-dir", type=Path, default=Path("results"))
+    p.add_argument(
+        "--out-dir",
+        type=Path,
+        default=None,
+        help="Default: results/ for scifact, results/<dataset>/ otherwise.",
+    )
     p.add_argument("--embedding-model", default="BAAI/bge-small-en-v1.5")
     p.add_argument("--no-rerank", action="store_true", help="Skip the cross-encoder variants.")
     p.add_argument("--limit", type=int, default=None, help="Evaluate only the first N queries.")
@@ -98,14 +108,19 @@ def main() -> None:
         help="Re-draw the chart from an existing results/benchmark.json without re-running.",
     )
     args = p.parse_args()
+    label = {"scifact": "SciFact", "nfcorpus": "NFCorpus"}.get(args.dataset, args.dataset)
+    if args.out_dir is None:
+        args.out_dir = (
+            Path("results") if args.dataset == "scifact" else Path("results") / args.dataset
+        )
 
     if args.replot:
         results = json.loads((args.out_dir / "benchmark.json").read_text())
-        plot(results, args.out_dir / "benchmark.png")
+        plot(results, args.out_dir / "benchmark.png", label)
         print(f"Wrote {args.out_dir / 'benchmark.png'}")
         return
 
-    corpus = load_scifact(args.data_dir)
+    corpus = load_beir_dataset(args.dataset, args.data_dir)
     if args.limit:
         keep = list(corpus.queries)[: args.limit]
         corpus.queries = {q: corpus.queries[q] for q in keep}
@@ -124,10 +139,10 @@ def main() -> None:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / "benchmark.json").write_text(json.dumps(results, indent=2))
-    md = to_markdown(results, len(corpus), len(corpus.queries))
+    md = to_markdown(results, len(corpus), len(corpus.queries), label)
     (args.out_dir / "benchmark.md").write_text(md)
     try:
-        plot(results, args.out_dir / "benchmark.png")
+        plot(results, args.out_dir / "benchmark.png", label)
     except ImportError:
         print("matplotlib not installed; skipping chart (pip install 'ragbench[bench]').")
     print("\n" + md)

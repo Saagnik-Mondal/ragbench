@@ -45,34 +45,41 @@ def _fetch(url: str, dest: Path) -> None:
     urllib.request.urlretrieve(url, dest)  # noqa: S310 (fixed https URLs)
 
 
-def download_scifact(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
-    """Fetch SciFact from the HuggingFace BEIR mirror and convert it to BEIR's jsonl layout."""
+def download_beir(
+    name: str, data_dir: Path = DEFAULT_DATA_DIR, splits: tuple[str, ...] = ("test",)
+) -> Path:
+    """Fetch a BEIR dataset from the HuggingFace mirror and convert it to BEIR's jsonl layout."""
     import pyarrow.parquet as pq
 
-    target = data_dir / "scifact"
-    qrels_done = all((target / "qrels" / f"{s}.tsv").exists() for s in ("train", "test"))
+    target = data_dir / name
+    qrels_done = all((target / "qrels" / f"{s}.tsv").exists() for s in splits)
     if (target / "corpus.jsonl").exists() and qrels_done:
         return target
-    print(f"Downloading SciFact to {target} ...")
+    print(f"Downloading {name} to {target} ...")
     raw = data_dir / "_raw"
     _fetch(
-        f"{HF_BASE}/BeIR/scifact/resolve/main/corpus/corpus-00000-of-00001.parquet",
-        raw / "c.parquet",
+        f"{HF_BASE}/BeIR/{name}/resolve/main/corpus/corpus-00000-of-00001.parquet",
+        raw / f"{name}_c.parquet",
     )
     _fetch(
-        f"{HF_BASE}/BeIR/scifact/resolve/main/queries/queries-00000-of-00001.parquet",
-        raw / "q.parquet",
+        f"{HF_BASE}/BeIR/{name}/resolve/main/queries/queries-00000-of-00001.parquet",
+        raw / f"{name}_q.parquet",
     )
-    for split in ("train", "test"):
+    for split in splits:
         _fetch(
-            f"{HF_BASE}/BeIR/scifact-qrels/resolve/main/{split}.tsv",
+            f"{HF_BASE}/BeIR/{name}-qrels/resolve/main/{split}.tsv",
             target / "qrels" / f"{split}.tsv",
         )
-    for src, name in (("c.parquet", "corpus.jsonl"), ("q.parquet", "queries.jsonl")):
-        with open(target / name, "w", encoding="utf-8") as f:
+    for src, out in ((f"{name}_c.parquet", "corpus.jsonl"), (f"{name}_q.parquet", "queries.jsonl")):
+        with open(target / out, "w", encoding="utf-8") as f:
             for row in pq.read_table(raw / src).to_pylist():
                 f.write(json.dumps(row) + "\n")
     return target
+
+
+def download_scifact(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
+    """SciFact with both splits (train claims are used by the calibration experiment)."""
+    return download_beir("scifact", data_dir, ("train", "test"))
 
 
 def load_beir(path: Path, split: str = "test") -> Corpus:
@@ -103,3 +110,9 @@ def load_beir(path: Path, split: str = "test") -> Corpus:
 
 def load_scifact(data_dir: Path = DEFAULT_DATA_DIR, split: str = "test") -> Corpus:
     return load_beir(download_scifact(data_dir), split=split)
+
+
+def load_beir_dataset(name: str, data_dir: Path = DEFAULT_DATA_DIR, split: str = "test") -> Corpus:
+    """Load any BEIR dataset by name, for example "scifact" or "nfcorpus"."""
+    splits = ("train", "test") if name == "scifact" else (split,)
+    return load_beir(download_beir(name, data_dir, splits), split=split)
