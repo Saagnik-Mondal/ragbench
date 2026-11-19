@@ -50,7 +50,8 @@ def download_scifact(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
     import pyarrow.parquet as pq
 
     target = data_dir / "scifact"
-    if (target / "corpus.jsonl").exists() and (target / "qrels" / "test.tsv").exists():
+    qrels_done = all((target / "qrels" / f"{s}.tsv").exists() for s in ("train", "test"))
+    if (target / "corpus.jsonl").exists() and qrels_done:
         return target
     print(f"Downloading SciFact to {target} ...")
     raw = data_dir / "_raw"
@@ -62,7 +63,11 @@ def download_scifact(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
         f"{HF_BASE}/BeIR/scifact/resolve/main/queries/queries-00000-of-00001.parquet",
         raw / "q.parquet",
     )
-    _fetch(f"{HF_BASE}/BeIR/scifact-qrels/resolve/main/test.tsv", target / "qrels" / "test.tsv")
+    for split in ("train", "test"):
+        _fetch(
+            f"{HF_BASE}/BeIR/scifact-qrels/resolve/main/{split}.tsv",
+            target / "qrels" / f"{split}.tsv",
+        )
     for src, name in (("c.parquet", "corpus.jsonl"), ("q.parquet", "queries.jsonl")):
         with open(target / name, "w", encoding="utf-8") as f:
             for row in pq.read_table(raw / src).to_pylist():
@@ -96,5 +101,5 @@ def load_beir(path: Path, split: str = "test") -> Corpus:
     return Corpus(documents=documents, queries=queries, qrels=qrels)
 
 
-def load_scifact(data_dir: Path = DEFAULT_DATA_DIR) -> Corpus:
-    return load_beir(download_scifact(data_dir))
+def load_scifact(data_dir: Path = DEFAULT_DATA_DIR, split: str = "test") -> Corpus:
+    return load_beir(download_scifact(data_dir), split=split)

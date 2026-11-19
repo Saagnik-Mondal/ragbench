@@ -18,10 +18,12 @@ dependencies = [
 [project.optional-dependencies]
 llm = ["anthropic>=0.40"]
 bench = ["matplotlib>=3.8"]
-dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.5"]
+calib = ["scikit-learn>=1.4", "matplotlib>=3.8"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.5", "scikit-learn>=1.4"]
 
 [project.scripts]
 ragbench-eval = "ragbench.evaluate:main"
+ragbench-calibrate = "ragbench.calibrate_eval:main"
 ragbench-serve = "ragbench.api:serve"
 
 [build-system]

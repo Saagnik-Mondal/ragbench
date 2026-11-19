@@ -1,12 +1,12 @@
 name: Benchmark
 
-# Runs the full SciFact retrieval benchmark on GitHub's servers and commits the results
-# (results/benchmark.json, benchmark.md, benchmark.png) back to the repository.
+# Runs the full SciFact retrieval benchmark on GitHub's servers and saves the results
+# (benchmark.json, benchmark.md, benchmark.png) as a downloadable artifact.
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   benchmark:
@@ -35,12 +35,3 @@ jobs:
         with:
           name: benchmark-results
           path: results/
-
-      - name: Commit results
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add results
-          git commit -m "Add benchmark results" || echo "No changes to commit"
-          git pull --rebase origin main
-          git push

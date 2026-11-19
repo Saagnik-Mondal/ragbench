@@ -1,0 +1,38 @@
+name: Calibration experiment
+
+# Runs the calibrated-retrieval experiment on SciFact and saves the results
+# (calibration.md, calibration.json, reliability.png, risk_coverage.png) as a downloadable artifact.
+# Embedding the corpus is the slow part, so the vectors and models are cached between runs.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.fastembed_cache
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.12
+      - run: uv sync --extra calib --python 3.12
+
+      - name: Cache models and embeddings
+        uses: actions/cache@v4
+        with:
+          path: |
+            .fastembed_cache
+            data
+          key: ragbench-scifact-embeddings-v1
+
+      - name: Run experiment
+        run: uv run python -m ragbench.calibrate_eval
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calibration-results
+          path: results/
