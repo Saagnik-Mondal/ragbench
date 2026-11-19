@@ -40,6 +40,40 @@ Each of the 300 test questions has a few papers that experts marked as correct. 
 2. **The reranker did not help here.** Adding a general-purpose cross-encoder lowered nDCG@10 from 0.726 to 0.696 and made queries about 50x slower. The reranker was trained on web search passages, while SciFact queries are scientific claims, so the mismatch is plausible. I did not test a domain-tuned reranker, so this is a result for this model on this dataset, not a claim that reranking never helps.
 3. **The harness checks out.** BM25 scores 0.669 nDCG@10, close to the roughly 0.665 reported for BM25 on SciFact in the BEIR paper, which is a useful sanity check that the metrics are implemented correctly.
 
+## Can you trust the retriever's confidence?
+
+A RAG system should know when it is probably wrong. Many demos use the raw similarity score as a "confidence", but nothing guarantees that a score of 0.8 means "right 80% of the time". I tested that on SciFact: for each claim, is the hybrid retriever's top result a paper the experts marked as correct? (It is for 62.3% of the 300 test claims.) Then I compared ways of turning retrieval signals into a probability, and checked whether that probability lets the system safely say "I'm not sure".
+
+No leakage: calibrators were fit on 566 SciFact train claims, abstention thresholds were chosen on 243 other train claims, and the 300 test claims were used once for the numbers below. Full table with confidence intervals: [`results/calibration.md`](results/calibration.md).
+
+| Confidence method | ECE (lower is better) | Brier | AUROC (higher is better) |
+|---|---:|---:|---:|
+| Raw cosine score, used as a probability | 0.193 | 0.260 | 0.667 |
+| Platt scaling (dense score) | 0.066 | 0.220 | 0.667 |
+| Histogram binning (dense score) | 0.051 | 0.222 | 0.652 |
+| Isotonic regression (dense score) | 0.059 | 0.222 | 0.655 |
+| Logistic regression on all signals | 0.060 | **0.162** | **0.837** |
+
+ECE (expected calibration error) measures the gap between stated confidence and how often the answer is really right. AUROC measures how well the confidence separates right answers from wrong ones.
+
+![Reliability diagram](results/reliability.png)
+
+1. **The raw score is badly overconfident.** Its ECE is 0.193 (95% CI 0.139 to 0.250). Calibration cuts it to 0.05 to 0.07, and the intervals do not overlap (for example isotonic: 0.043 to 0.123).
+2. **Calibrating one score does not make the system better at choosing what to answer.** AUROC stays at 0.65 to 0.67 for every single-score method. That is expected: a monotone fix to one number cannot change the ranking of answers. It only makes the stated probabilities honest.
+3. **Combining signals does.** A logistic model over eight signals (dense and BM25 scores, score margins, whether the two retrievers agree, fused score, query length) lifts AUROC to 0.837 and cuts Brier from 0.222 to 0.162.
+4. **That is what makes abstaining useful.** At about the same answer precision, the multi-signal confidence answers far more questions:
+
+| Method | Questions answered | Precision of those answers |
+|---|---:|---:|
+| Raw cosine (threshold for 90% target) | 15.7% | 85.1% |
+| Logistic on all signals (threshold for 90% target) | 54.0% | 84.0% |
+
+![Accuracy vs coverage](results/risk_coverage.png)
+
+**An honest caveat:** thresholds picked on 243 held-out claims did not hit their targets exactly on the test set (a 90% target delivered about 84 to 85%). With samples this small, a threshold is an estimate, not a guarantee. Other limits: "correct" means the top result is in SciFact's expert-labelled relevant set, so a good but unlabelled paper counts as wrong; one dataset; one embedding model.
+
+Reproduce: `uv run python -m ragbench.calibrate_eval` (needs `uv sync --extra calib`), or run the **Calibration experiment** workflow in the Actions tab. The calibration code is in [`calibration.py`](src/ragbench/calibration.py) and [`calibrate_eval.py`](src/ragbench/calibrate_eval.py); ECE, Brier, histogram binning and the risk-coverage and threshold logic are written from scratch and tested.
+
 ## What is in the box
 
 - **Retrieval strategies** behind one interface: BM25, dense, hybrid (reciprocal rank fusion), and two-stage rerank. See [`retrievers.py`](src/ragbench/retrievers.py).
