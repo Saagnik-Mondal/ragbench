@@ -37,8 +37,24 @@ Each of the 300 test questions has a few papers that experts marked as correct. 
 ### What the numbers say
 
 1. **Hybrid retrieval is the best default.** Fusing BM25 and dense rankings with reciprocal rank fusion lifts nDCG@10 from 0.669 (BM25) to 0.726, about 8.5% relative, for roughly 51 ms extra per query. It also has the best recall at 100, which matters when a downstream step needs a good candidate pool.
-2. **The reranker did not help here.** Adding a general-purpose cross-encoder lowered nDCG@10 from 0.726 to 0.696 and made queries about 50x slower. The reranker was trained on web search passages, while SciFact queries are scientific claims, so the mismatch is plausible. I did not test a domain-tuned reranker, so this is a result for this model on this dataset, not a claim that reranking never helps.
+2. **The reranker did not help on SciFact.** Adding a general-purpose cross-encoder lowered nDCG@10 from 0.726 to 0.696 and made queries about 50x slower. The reranker was trained on web search passages, while SciFact queries are scientific claims, so the mismatch is plausible. I did not test a domain-tuned reranker, so this is a result for this model on this dataset. On a second dataset the answer was different (next section). Note that the reranked row's Recall@100 is not comparable with the others: the reranker only reorders its top 30 candidates, so it cannot retrieve more than 30 documents.
 3. **The harness checks out.** BM25 scores 0.669 nDCG@10, close to the roughly 0.665 reported for BM25 on SciFact in the BEIR paper, which is a useful sanity check that the metrics are implemented correctly.
+
+### Do the findings hold on a second dataset?
+
+I ran the same benchmark on [BEIR NFCorpus](https://www.cl.uni-heidelberg.de/statnlpgroup/nfcorpus/) (nutrition and medical questions, 3,633 documents, 323 test queries). Full results: [`results/nfcorpus/`](results/nfcorpus/benchmark.md).
+
+| Strategy | nDCG@10 | Recall@10 | MRR@10 | Mean latency |
+|---|---:|---:|---:|---:|
+| BM25 | 0.311 | 0.153 | 0.522 | 1.8 ms |
+| Dense (bge-small) | 0.343 | 0.163 | 0.533 | 15 ms |
+| Hybrid (BM25 + dense, RRF) | 0.346 | 0.165 | 0.558 | 22 ms |
+| Hybrid + cross-encoder rerank | **0.362** | **0.170** | **0.579** | 2,971 ms |
+
+- **Hybrid beating BM25 holds.** nDCG@10 is 11.4% higher (0.346 vs 0.311), compared with 8.5% on SciFact. The gap between dense and hybrid is small here (0.343 vs 0.346) and I did not test whether it is significant; hybrid was not worse than dense on either dataset.
+- **The reranker conclusion does not hold.** On NFCorpus the reranker improves nDCG@10 from 0.346 to 0.362 (+4.6%), where on SciFact it lowered it by 0.030. It is still about 133 times slower (2,971 ms against 22 ms per query). So whether reranking pays for itself depends on the dataset, and I would not claim a general rule from two datasets.
+
+Reproduce: `uv run python -m ragbench.evaluate --dataset nfcorpus`, or run the **Benchmark** workflow and choose `nfcorpus`.
 
 ## Can you trust the retriever's confidence?
 
