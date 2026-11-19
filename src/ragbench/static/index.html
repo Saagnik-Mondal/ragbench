@@ -122,8 +122,8 @@ EXAMPLES.forEach(t => {
   $("ex").appendChild(b);
 });
 fetch("/strategies").then(r => r.json()).then(names => {
-  $("s").innerHTML = names.map(n => `<option ${n === "hybrid+rerank" || n === "hybrid" ? "selected" : ""}>${esc(n)}</option>`).join("");
-  if (names.includes("hybrid+rerank")) $("s").value = "hybrid+rerank";
+  // Hybrid is the default: in the benchmark it beat the reranked variant and is much faster.
+  $("s").innerHTML = names.map(n => `<option ${n === "hybrid" ? "selected" : ""}>${esc(n)}</option>`).join("");
 });
 </script>
 </body>
